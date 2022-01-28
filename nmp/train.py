@@ -6,6 +6,7 @@ from rlkit.launchers.launcher_util import set_seed, setup_logger
 
 from nmp.launcher.sac import sac
 from nmp import settings
+import numpy as np
 
 
 @click.command(help="nmp.train env_name exp_name")
@@ -19,7 +20,7 @@ from nmp import settings
 @click.option("-rscale", "--reward-scale", default=1, type=float)
 @click.option("-h-dim", "--hidden-dim", default=256, type=int)
 @click.option("-bs", "--batch-size", default=256, type=int)
-@click.option("-lr", "--learning-rate", default=3e-4, type=float)
+@click.option("-lr", "--learning-rate", default=3e-1, type=float)
 @click.option("-n-layers", "--n-layers", default=3, type=int)
 @click.option("-tau", "--soft-target-tau", default=5e-3, type=float)
 @click.option("-auto-alpha", "--auto-alpha/--no-auto-alpha", is_flag=True, default=True)
@@ -28,6 +29,7 @@ from nmp import settings
 @click.option("-horizon", "--horizon", default=80, type=int)
 @click.option("-rbs", "--replay-buffer-size", default=int(1e6), type=int)
 @click.option("-cpu", "--cpu/--no-cpu", is_flag=True, default=False)
+@click.option("-resume_from", "--resume_from", default=None, type=str)
 @click.option(
     "-snap-mode",
     "--snapshot-mode",
@@ -58,6 +60,7 @@ def main(
     snapshot_mode,
     snapshot_gap,
     cpu,
+    resume_from,
 ):
     valid_modes = ["vanilla", "her"]
     valid_archi = [
@@ -133,8 +136,17 @@ def main(
     setup_logger(**setup_logger_kwargs)
     ptu.set_gpu_mode(not cpu, distributed_mode=False)
     print(f"Start training...")
-    sac(variant)
-
+    variant["env_name"] = "Maze-distance-v0"
+    variant["env_kwargs"] = {"grid_size": 5, "distance_to_goal": 0.1}
+    sac(variant, resume_from)
+    size = 5
+    for dist in np.arange(0.1, 0.7, 0.05):
+        print(size, dist)
+        var = variant.copy()
+        var["env_name"] = "Maze-distance-v0"
+        var["env_kwargs"] = {"grid_size": size, "distance_to_goal": dist}
+        resume_from = "/home/ahmed/maze_baseline/seed0/params.pkl"
+        sac(var, resume_from)
 
 if __name__ == "__main__":
     main()

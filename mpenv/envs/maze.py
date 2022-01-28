@@ -20,9 +20,20 @@ from mpenv.observers.point_cloud import PointCloudObserver
 from mpenv.observers.ray_tracing import RayTracingObserver
 from mpenv.observers.maze import MazeObserver
 
+def gen2_random(d):
+    while True:
+        x1, y1 = np.random.uniform(0.2,0.8), np.random.uniform(0.2,0.8)
+        theta = np.random.uniform(0,2*np.pi) 
+        radius = d * ( np.random.random()**(1./3.) )
+        y2 = np.sin(theta) * radius + y1
+        x2 = np.cos(theta) * radius + x1
+        if (0 > x2 or x2 > 1) or (0 > y2 or y2 > 1):
+            continue
+        return np.array([x1, y1, 0, 0, 0, 0, 1]), np.array([x2, y2, 0, 0, 0, 0, 1])
+
 
 class MazeGoal(Base):
-    def __init__(self, grid_size):
+    def __init__(self, grid_size, distance_to_goal = None):
         super().__init__(robot_name="sphere")
 
         self.thickness = 0.02
@@ -37,6 +48,7 @@ class MazeGoal(Base):
         )
 
         self.fig, self.ax, self.pos = None, None, None
+        self.distance_to_goal = distance_to_goal
 
     def _reset(self, idx_env=None, start=None, goal=None):
         model_wrapper = self.model_wrapper
@@ -46,11 +58,17 @@ class MazeGoal(Base):
             self.add_obstacle(geom_obj, static=True)
         model_wrapper.create_data()
 
-        valid_sample = False
-        while not valid_sample:
-            self.state = self.random_configuration()
-            self.goal_state = self.random_configuration()
-            valid_sample = self.validate_sample(self.state, self.goal_state)
+        if self.distance_to_goal is None:
+            valid_sample = False
+            while not valid_sample:
+                self.state = self.random_configuration()
+                self.goal_state = self.random_configuration()
+                valid_sample = self.validate_sample(self.state, self.goal_state)
+        else:
+            A, B = gen2_random(self.distance_to_goal)
+            self.set_state(A)
+            self.set_goal_state(B)
+
         if start is not None:
             self.set_state(start)
         if goal is not None:
@@ -192,6 +210,13 @@ def extract_obstacles(maze, thickness):
 
 def maze_edges(grid_size):
     env = MazeGoal(grid_size)
+    env = MazeObserver(env)
+    coordinate_frame = "local"
+    env = RobotLinksObserver(env, coordinate_frame)
+    return env
+
+def maze_edges_distance(grid_size, distance_to_goal):
+    env = MazeGoal(grid_size, distance_to_goal)
     env = MazeObserver(env)
     coordinate_frame = "local"
     env = RobotLinksObserver(env, coordinate_frame)

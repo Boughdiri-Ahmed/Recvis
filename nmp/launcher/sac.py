@@ -91,9 +91,13 @@ def get_path_collector(variant, expl_env, eval_env, policy, eval_policy):
     return expl_path_collector, eval_path_collector
 
 
-def sac(variant):
-    expl_env = gym.make(variant["env_name"])
-    eval_env = gym.make(variant["env_name"])
+def sac(variant, resume_from = None):
+    if "env_kwargs" not in variant:
+        expl_env = gym.make(variant["env_name"])
+        eval_env = gym.make(variant["env_name"])
+    else:
+        expl_env = gym.make(variant["env_name"], **variant["env_kwargs"])
+        eval_env = gym.make(variant["env_name"], **variant["env_kwargs"])
     expl_env.seed(variant["seed"])
     eval_env.set_eval()
 
@@ -108,9 +112,23 @@ def sac(variant):
         )
 
     replay_buffer = get_replay_buffer(variant, expl_env)
-    qf1, qf2, target_qf1, target_qf2, policy, shared_base = get_networks(
-        variant, expl_env
-    )
+
+    if resume_from is None:
+        qf1, qf2, target_qf1, target_qf2, policy, shared_base = get_networks(
+            variant, expl_env
+        )
+        policy_optimizer = None
+        qf1_optimizer = None
+        qf2_optimizer = None
+
+    else:
+        data = torch.load(resume_from, map_location=torch.device("cuda"))
+        policy, qf1, qf2, target_qf1, target_qf2, shared_base = data['trainer/policy'], data['trainer/qf1'], data[
+            'trainer/qf2'], data['trainer/target_qf1'], data['trainer/target_qf2'], None
+        policy_optimizer, qf1_optimizer, qf2_optimizer = data['trainer/policy_optimizer'], data[
+            'trainer/qf1_optimizer'], data['trainer/qf2_optimizer']
+        print('Networks loaded')
+
     expl_policy = policy
     eval_policy = MakeDeterministic(policy)
 
@@ -128,6 +146,13 @@ def sac(variant):
         target_qf2=target_qf2,
         **variant["trainer_kwargs"],
     )
+
+    if policy_optimizer is not None:
+        trainer.policy_optimizer = policy_optimizer
+        trainer.qf1_optimizer = qf1_optimizer
+        trainer.qf2_optimizer = qf2_optimizer
+        print('Optimisers Loaded')
+
     if mode == "her":
         trainer = HERTrainer(trainer)
     algorithm = TorchBatchRLAlgorithm(
@@ -139,6 +164,5 @@ def sac(variant):
         replay_buffer=replay_buffer,
         **variant["algorithm_kwargs"],
     )
-
     algorithm.to(ptu.device)
     algorithm.train()
